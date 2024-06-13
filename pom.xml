@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.elsquatrecaps.portada.portadaocr</groupId>
-    <artifactId>jportada-ocr</artifactId>
+    <artifactId>jportada_ocr</artifactId>
     <version>1.0-SNAPSHOT</version>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -13,9 +13,9 @@
     <name>PortadaOcr</name>
     <distributionManagement>
         <repository>
-            <id>portada-jimagetools</id>
+            <id>portada</id>
             <name>GitHub portada-git Apache Maven Packages for PortADa project</name>
-            <url>https://maven.pkg.github.com/portada-git/jportada_image_tools.git</url>
+            <url>https://maven.pkg.github.com/portada-git/jportada_ocr</url>
         </repository>
     </distributionManagement>    
     <build>

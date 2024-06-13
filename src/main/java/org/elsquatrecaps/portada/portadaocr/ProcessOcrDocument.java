@@ -5,7 +5,6 @@ import com.google.api.client.util.Lists;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.documentai.v1beta3.Document;
-import com.google.cloud.documentai.v1beta3.Document.Page;
 import com.google.cloud.documentai.v1beta3.DocumentProcessorServiceClient;
 import com.google.cloud.documentai.v1beta3.DocumentProcessorServiceSettings;
 import com.google.cloud.documentai.v1beta3.ProcessRequest;
@@ -17,6 +16,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -31,7 +31,8 @@ public class ProcessOcrDocument {
     private String projectId;
     private String location; // Format is "us" or "eu".
     private String processorId;
-    private String credentialsPath;
+    private String credentialsPath=null;
+    private InputStream credentialsStream=null;
     private String filePath;
     private byte[] imageFileData;
     private Document documentResponse;
@@ -50,6 +51,25 @@ public class ProcessOcrDocument {
     }
     
     
+    public void init(String basePath, String team, InputStream credentials) throws FileNotFoundException, IOException {
+        StringBuilder strb = new StringBuilder(basePath);
+        Properties prop = new Properties();
+        if(!basePath.endsWith("/")){
+            strb.append("/");
+        }
+        strb.append(team);
+        if(!team.endsWith("/")){
+            strb.append("/");
+        }
+        strb.append(configFileName);
+        prop.load(new FileInputStream(strb.toString()));
+        this.projectId = prop.getProperty("projectId");
+        this.location = prop.getProperty("location");
+        this.processorId = prop.getProperty("processorId");
+        this.credentialsPath = null;
+        this.credentialsStream = credentials;
+    }
+    
     public void init(String basePath, String team) throws FileNotFoundException, IOException {
         StringBuilder strb = new StringBuilder(basePath);
         Properties prop = new Properties();
@@ -66,6 +86,18 @@ public class ProcessOcrDocument {
         this.location = prop.getProperty("location");
         this.processorId = prop.getProperty("processorId");
         this.credentialsPath = prop.getProperty("credentialsPath");
+    }
+    
+    public String getCredentialsPath(){
+        return credentialsPath;
+    }
+    
+    public void updateCredentialsStream() throws FileNotFoundException{
+        this.credentialsStream = new FileInputStream(new File(credentialsPath).getAbsoluteFile());
+    }
+    
+    public void setCredentialsStream(InputStream is){
+        this.credentialsStream = is;
     }
 
     public void setFilePath(String path) throws IOException{
@@ -90,7 +122,7 @@ public class ProcessOcrDocument {
         String extension = filePath.substring(filePath.lastIndexOf(".")+1);
         String mime = mimeTypes.get(extension);
         String endpoint = String.format("%s-documentai.googleapis.com:443", location);
-        GoogleCredentials credentialsProvider = GoogleCredentials.fromStream(new FileInputStream(new File(credentialsPath).getAbsoluteFile()))
+        GoogleCredentials credentialsProvider = GoogleCredentials.fromStream(credentialsStream)
                 .createScoped(Lists.newArrayList(Collections.singleton("https://www.googleapis.com/auth/cloud-platform")));
         DocumentProcessorServiceSettings settings =DocumentProcessorServiceSettings.newBuilder().setEndpoint(endpoint)
                 .setCredentialsProvider(FixedCredentialsProvider.create(credentialsProvider)).build();
