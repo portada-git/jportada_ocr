@@ -1,6 +1,8 @@
 package org.elsquatrecaps.portada.portadaocr;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.util.Lists;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -140,6 +142,13 @@ public class ProcessOcrDocument {
             documentResponse = result.getDocument();
         }
     }
+    
+    public String getJsonString() throws JsonProcessingException{
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsString(documentResponse);
+    }
+
+
     
     public Document getResult(){
         return documentResponse;
