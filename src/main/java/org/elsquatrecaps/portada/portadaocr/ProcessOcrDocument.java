@@ -13,6 +13,8 @@ import com.google.cloud.documentai.v1beta3.ProcessRequest;
 import com.google.cloud.documentai.v1beta3.ProcessResponse;
 import com.google.cloud.documentai.v1beta3.RawDocument;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -143,13 +145,10 @@ public class ProcessOcrDocument {
         }
     }
     
-    public String getJsonString() throws JsonProcessingException{
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.writeValueAsString(documentResponse);
+    public String getJsonString() throws InvalidProtocolBufferException{
+        return JsonFormat.printer().print(documentResponse);
     }
 
-
-    
     public Document getResult(){
         return documentResponse;
     }
