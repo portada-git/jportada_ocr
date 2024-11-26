@@ -13,12 +13,14 @@ import com.google.cloud.documentai.v1beta3.RawDocument;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -94,12 +96,20 @@ public class ProcessOcrDocument {
         return credentialsPath;
     }
     
+    public InputStream getCredentialsStream() throws FileNotFoundException{
+        if(credentialsPath!=null){
+            updateCredentialsStream();
+        }
+        return credentialsStream;
+    }
+    
     public void updateCredentialsStream() throws FileNotFoundException{
         this.credentialsStream = new FileInputStream(new File(credentialsPath).getAbsoluteFile());
     }
     
     public void setCredentialsStream(InputStream is){
         this.credentialsStream = is;
+        this.credentialsPath=null;
     }
 
     public void setFilePath(String path) throws IOException{
@@ -124,7 +134,7 @@ public class ProcessOcrDocument {
         String extension = filePath.substring(filePath.lastIndexOf(".")+1);
         String mime = mimeTypes.get(extension);
         String endpoint = String.format("%s-documentai.googleapis.com:443", location);
-        GoogleCredentials credentialsProvider = GoogleCredentials.fromStream(credentialsStream)
+        GoogleCredentials credentialsProvider = GoogleCredentials.fromStream(getCredentialsStream())
                 .createScoped(Lists.newArrayList(Collections.singleton("https://www.googleapis.com/auth/cloud-platform")));
         DocumentProcessorServiceSettings settings =DocumentProcessorServiceSettings.newBuilder().setEndpoint(endpoint)
                 .setCredentialsProvider(FixedCredentialsProvider.create(credentialsProvider)).build();
