@@ -13,14 +13,12 @@ import com.google.cloud.documentai.v1beta3.RawDocument;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -28,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 public class ProcessOcrDocument {
     private static final String configFileName = "project_access.properties";
@@ -177,6 +176,10 @@ public class ProcessOcrDocument {
         return documentResponse.getText();
     }
     
+    public String getParagraphs(){
+        return getParagraphs(-1);
+    }
+    
     public String getParagraphs(int s){
         StringBuilder strb = new StringBuilder();
         ParagraphPointer pointer = new ParagraphPointer(documentResponse);
@@ -218,18 +221,43 @@ public class ProcessOcrDocument {
 
         public String getNext(){
             String ret;
+            String nextp;
+            String cat="\n";
             if(returnEol){
                 ret = EOL;
             }else{
-                 if (document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegmentsList().size() > 0) {
-                    int startIdx = (int) document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegments(0).getStartIndex();
-                    int endIdx = (int) document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegments(0).getEndIndex();
-                    ret =  document.getText().substring(startIdx, endIdx).concat("\n");
-                }else{
-                     ret = "\n";
-                 }
+                ret = getParagraph(page, paragraf, "\n");
+                nextp = getParagraph(page, paragraf+1, "");
+                int s = -1;
+                Pattern p1 = Pattern.compile("^.*\\w\n$", Pattern.DOTALL);
+                Pattern p2 = Pattern.compile("^\\s*[^A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL);
+                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL);
+                if(p1.matcher(ret).matches() && p2.matcher(nextp).matches()){
+                    cat = " ";
+                }else if(p3.matcher(ret).matches()){
+                    cat = "";
+                    s=0;
+                }
+                ret = ret.replaceAll("[-¬]\\n", "").replaceAll(" ?\\n ?", " ");
+                ret = ret.substring(0, ret.length()+s).concat(cat);
             }
             paragraf++;
+            return ret;
+        }
+        
+        private String getParagraph(int page, int paragraf, String def){
+            String ret=def;
+            if(paragraf>=document.getPages(page).getParagraphsCount()){
+                if(page+1<document.getPagesCount()){
+                    ret = getParagraph(page+1, 0, def);
+                }
+            }else{
+                if (document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegmentsList().size() > 0) {
+                    int startIdx = (int) document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegments(0).getStartIndex();
+                    int endIdx = (int) document.getPages(page).getParagraphs(paragraf).getLayout().getTextAnchor().getTextSegments(0).getEndIndex();
+                    ret = document.getText().substring(startIdx, endIdx);
+                }
+            }
             return ret;
         }
     }
