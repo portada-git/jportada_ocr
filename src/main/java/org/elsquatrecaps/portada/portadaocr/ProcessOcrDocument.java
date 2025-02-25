@@ -5,6 +5,7 @@ import com.google.api.client.util.Lists;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.documentai.v1beta3.Document;
+import com.google.cloud.documentai.v1beta3.Document.Page.Token;
 import com.google.cloud.documentai.v1beta3.DocumentProcessorServiceClient;
 import com.google.cloud.documentai.v1beta3.DocumentProcessorServiceSettings;
 import com.google.cloud.documentai.v1beta3.ProcessRequest;
@@ -168,12 +169,55 @@ public class ProcessOcrDocument {
     
     public void saveText(String path) throws IOException{
         try(FileWriter fw = new FileWriter(path)){
-            fw.append(getParagraphs(0));
+//            fw.append(getParagraphs(0));
+            fw.append(ProcessOcrDocument.this.getWordsToString());
         }
     }
     
     public String getText(){
         return documentResponse.getText();
+    }
+    
+    public String getWordsToString(){
+        return getWordsToString(0);
+    }
+    
+    public String getWordsToString(int s){
+        StringBuilder strb = new StringBuilder();
+        WordPointer pointer = new WordPointer(documentResponse);
+        if(s<=0){
+            s=documentResponse.getPages(0).getTokensCount();
+            for(int i=1; i< documentResponse.getPagesCount(); i++){
+                s+=documentResponse.getPages(i).getTokensCount();
+            }
+        }
+        int i=0;
+        while (i<s && pointer.hasNext()){
+            strb.append(pointer.getNext());
+            i++;
+        }
+        return strb.toString();
+    }
+    
+    public String getLines(){
+       return getLines(-1);
+    }
+    
+    public String getLines(int s){
+        StringBuilder strb = new StringBuilder();
+        LinePointer pointer = new LinePointer(documentResponse);
+        if(s<=0){
+            s=documentResponse.getPages(0).getLinesCount();
+            for(int i=1; i< documentResponse.getPagesCount(); i++){
+                s+=documentResponse.getPages(i).getLinesCount();
+            }
+        }
+        int i=0;
+        while (i<s && pointer.hasNext()){
+            strb.append(pointer.getNext());
+            i++;
+        }
+        return strb.toString();
     }
     
     public String getParagraphs(){
@@ -229,9 +273,9 @@ public class ProcessOcrDocument {
                 ret = getParagraph(page, paragraf, "\n");
                 nextp = getParagraph(page, paragraf+1, "");
                 int s = -1;
-                Pattern p1 = Pattern.compile("^.*\\w\n$", Pattern.DOTALL);
-                Pattern p2 = Pattern.compile("^\\s*[^A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL);
-                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL);
+                Pattern p1 = Pattern.compile("^.*\\w\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p2 = Pattern.compile("^\\s*[^A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
                 if(p1.matcher(ret).matches() && p2.matcher(nextp).matches()){
                     cat = " ";
                 }else if(p3.matcher(ret).matches()){
@@ -261,6 +305,167 @@ public class ProcessOcrDocument {
             return ret;
         }
     }
+    
+    private static class LinePointer extends Pointer{
+        final static String EOL = "\n";
+        boolean returnEol=false;
+        int line=0;
+
+        public LinePointer(Document doc) {
+            super(doc);
+        }
+        
+        public boolean hasNext(){
+            if(line>=document.getPages(page).getLinesCount()){
+                if(returnEol){
+                    line=0;
+                    page++;
+                    returnEol=false;
+                }else{
+                    returnEol=true;
+                }
+            }
+            return page<document.getPagesCount();
+        }
+
+        public String getNext(){
+            String ret;
+            String nextp;
+            String cat=" ";
+            if(returnEol){
+                ret = EOL;
+            }else{
+                ret = getLine(page, line, "\n");
+                nextp = getLine(page, line+1, "");
+                int s = -1;
+                Pattern p11 = Pattern.compile("^.*\\w{2,}\\W\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p21 = Pattern.compile("^\\s*[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p12 = Pattern.compile("^.*\\.\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p22 = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+                if(p11.matcher(ret).matches() && p21.matcher(nextp).matches()
+                        || p12.matcher(ret).matches() && p22.matcher(nextp).matches()){
+                    cat = "\n";
+                }else if(p3.matcher(ret).matches()){
+                    cat = "";
+                    s=0;
+                }
+                ret = ret.replaceAll("[-¬]\\n", "").replaceAll(" ?\\n ?", " ");
+                ret = ret.substring(0, ret.length()+s).concat(cat);
+            }
+            line++;
+            return ret;
+        }
+        
+        private String getLine(int page, int line, String def){
+            String ret=def;
+            if(line>=document.getPages(page).getLinesCount()){
+                if(page+1<document.getPagesCount()){
+                    ret = getLine(page+1, 0, def);
+                }
+            }else{
+                if (document.getPages(page).getLines(line).getLayout().getTextAnchor().getTextSegmentsCount() > 0) {
+                    int startIdx = (int) document.getPages(page).getLines(line).getLayout().getTextAnchor().getTextSegments(0).getStartIndex();
+                    int endIdx = (int) document.getPages(page).getLines(line).getLayout().getTextAnchor().getTextSegments(0).getEndIndex();
+                    ret = document.getText().substring(startIdx, endIdx);
+                }
+            }
+            return ret;
+        }
+    }    
+    
+    private static class Word{
+        String text;
+        int startIndex;
+        int endIndex;
+        int yCenterLeft;
+        int yCenterRight;
+        int xCenterLeft;
+        int xCenterRight;
+        
+        public Word(Token token, Document document){
+            startIndex = (int) token.getLayout().getTextAnchor().getTextSegments(0).getStartIndex();
+            endIndex = (int) token.getLayout().getTextAnchor().getTextSegments(0).getEndIndex();
+            text = document.getText().substring(startIndex, endIndex);
+            yCenterLeft= (token.getLayout().getBoundingPoly().getVertices(0).getY()+token.getLayout().getBoundingPoly().getVertices(3).getY())/2;
+            yCenterRight= (token.getLayout().getBoundingPoly().getVertices(1).getY()+token.getLayout().getBoundingPoly().getVertices(2).getY())/2;
+            xCenterLeft= (token.getLayout().getBoundingPoly().getVertices(0).getX()+token.getLayout().getBoundingPoly().getVertices(3).getX())/2;
+            xCenterRight= (token.getLayout().getBoundingPoly().getVertices(1).getX()+token.getLayout().getBoundingPoly().getVertices(2).getX())/2;
+        }
+    }
+    
+    private static class WordPointer extends Pointer{
+        final static String EOL = "\n";
+        boolean returnEol=false;
+        int token=0;
+
+        public WordPointer(Document doc) {
+            super(doc);
+        }
+        
+        public boolean hasNext(){
+            if(token>=document.getPages(page).getTokensCount()){
+                if(returnEol){
+                    token=0;
+                    page++;
+                    returnEol=false;
+                }else{
+                    returnEol=true;
+                }
+            }
+            return page<document.getPagesCount();
+        }
+
+        public String getNext(){
+            String ret;
+//            String nextp;
+            String cat="";
+            if(returnEol){
+                ret = EOL;
+            }else{
+                ret = getWordAsString(page, token, "");
+//                nextp = getLine(page, token+1, "");
+//                int s = -1;
+//                Pattern p11 = Pattern.compile("^.*\\w{2,}\\W\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+//                Pattern p21 = Pattern.compile("^\\s*[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+//                Pattern p12 = Pattern.compile("^.*\\.\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+//                Pattern p22 = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+//                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+//                if(p11.matcher(ret).matches() && p21.matcher(nextp).matches()
+//                        || p12.matcher(ret).matches() && p22.matcher(nextp).matches()){
+//                    cat = "\n";
+//                }else if(p3.matcher(ret).matches()){
+//                    cat = "";
+//                    s=0;
+//                }
+//                ret = ret.replaceAll("[-¬]\\n", "").replaceAll(" ?\\n ?", " ");
+//                ret = ret.substring(0, ret.length()+s).concat(cat);                  
+            }
+            token++;
+            return ret;
+        }
+        
+        private String getWordAsString(int page, int word, String def){
+            String ret = def;
+            Word w = getWord(page, word);
+            if (w!=null){
+                ret = w.text;
+            }
+            return ret;
+        }
+        
+        private Word getWord(int page, int word){
+            Word ret = null;
+            if(word>=document.getPages(page).getTokensCount()){
+                if(page+1<document.getPagesCount()){
+                    ret = getWord(page+1, 0);
+                }
+            }else{
+                ret = new Word(document.getPages(page).getTokens(word), document);
+            }
+            return ret;
+        }
+    }    
 
     private static class Pointer{
         Document document;

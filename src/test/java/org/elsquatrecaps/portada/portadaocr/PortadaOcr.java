@@ -15,7 +15,7 @@ import java.util.logging.Logger;
 public class PortadaOcr {
 
     public static void main(String[] args) {
-        String path = "../data/imatgeTransparencia.jpg";
+        String path = "./data/1852_08_03_BUE_LP_U_00_002.jpg";
         ProcessOcrDocument processOcrDocument = new ProcessOcrDocument();
         File ocrDir = new File("../ocr");
         if(!ocrDir.exists()){
@@ -26,15 +26,15 @@ public class PortadaOcr {
             processOcrDocument.init(new File("./").getCanonicalFile().getAbsolutePath(), "bcn");
             processOcrDocument.process(path);
             Document dc = processOcrDocument.getResult();
-            processOcrDocument.saveText("../ocr/imatgeTransparencia.txt");
-            processOcrDocument.saveRawText("../ocr/imatgeTransparencia.or.txt");
-            System.out.println(dc.getText());
+            processOcrDocument.saveText("../ocr/1852_08_03_BUE_LP_U_00_002.txt");
+            processOcrDocument.saveRawText("../ocr/1852_08_03_BUE_LP_U_00_002.or.txt");
+            System.out.println(processOcrDocument.getJsonString());
             
-            processOcrDocument.process("../data/inclinada.jpg");
-            dc = processOcrDocument.getResult();
-            processOcrDocument.saveText("../ocr/inclinada.txt");
-            processOcrDocument.saveRawText("../ocr/inclinada.or.txt");
-            System.out.println(dc.getText());
+//            processOcrDocument.process("../data/inclinada.jpg");
+//            dc = processOcrDocument.getResult();
+//            processOcrDocument.saveText("../ocr/inclinada.txt");
+//            processOcrDocument.saveRawText("../ocr/inclinada.or.txt");
+//            System.out.println(dc.getText());
             
 
         } catch (IOException ex) {
