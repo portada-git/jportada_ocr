@@ -22,8 +22,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -374,6 +377,71 @@ public class ProcessOcrDocument {
         }
     }    
     
+    private static final class Line extends Word{
+        Deque<Word> wordsOfLine;
+        int threshold;
+
+        public Line(int threshold) {
+            wordsOfLine = new LinkedList<>();            
+            this.threshold = threshold;
+        }
+        
+        public Line(Word word){
+            super();
+            addWord(word);
+        }
+        
+        public boolean addWord(Word word){
+            boolean ret;
+            if(wordsOfLine.isEmpty()){
+                wordsOfLine.add(word);
+                ret = true;
+            }else{
+                int cmp = compareTo(word);
+                if(cmp<0){
+                    ret = distance(word.xCenterRight, word.yCenterRight, xCenterLeft, yCenterLeft) < threshold;
+                    if(ret){
+                        wordsOfLine.addFirst(word);
+                        xCenterLeft = word.xCenterLeft;
+                        yCenterLeft = word.yCenterLeft;
+                    }
+                }else if(cmp>0){
+                    ret = distance(word.xCenterLeft, word.yCenterLeft, xCenterRight, yCenterRight) < threshold;
+                    if(ret){
+                        wordsOfLine.addLast(word);
+                        xCenterRight = word.xCenterRight;
+                        yCenterRight = word.yCenterRight;
+                    }
+                }else{
+                    ret = false;
+                }
+                if(ret){
+                    text = text.concat(word.text);
+                }                
+            }     
+            return ret;
+        }
+        
+        private int compareTo(Word word){
+            int ret;
+            if(word.xCenterRight <= this.xCenterLeft){
+                ret = -1;
+            }else if(word.xCenterLeft >= this.xCenterRight){
+                ret = 1;
+            }else{
+                //ERROR
+                ret = 0;
+            }
+            return ret;
+        }
+        
+        private int distance(int x1, int y1, int x2, int y2){
+            int ret;
+            ret = (int) Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2));
+            return ret;
+        }
+    }
+    
     private static class Word{
         String text;
         int startIndex;
@@ -382,6 +450,9 @@ public class ProcessOcrDocument {
         int yCenterRight;
         int xCenterLeft;
         int xCenterRight;
+        
+        protected Word(){
+        }
         
         public Word(Token token, Document document){
             startIndex = (int) token.getLayout().getTextAnchor().getTextSegments(0).getStartIndex();
