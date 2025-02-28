@@ -386,9 +386,13 @@ public class ProcessOcrDocument {
             this.threshold = threshold;
         }
         
-        public Line(Word word){
-            super();
+        public Line(Word word, int threshold){
+            this(threshold);
             addWord(word);
+        }
+        
+        public Line(Token token, Document document, int threshold){
+            this(new Word(token, document), threshold);
         }
         
         public boolean addWord(Word word){
