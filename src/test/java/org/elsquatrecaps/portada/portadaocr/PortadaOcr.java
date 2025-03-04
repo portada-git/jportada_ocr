@@ -15,7 +15,17 @@ import java.util.logging.Logger;
 public class PortadaOcr {
 
     public static void main(String[] args) {
-        String path = "./data/1852_08_03_BUE_LP_U_00_002.jpg";
+//        String path = "./data/inclinada_ordered_image_cleaned.jpg";
+//        String path = "./data/curvada.jpg";
+//        String path = "./data/1852_08_05_BUE_LP_U_00_001.jpg";
+//        String path = "./data/1852_08_03_BUE_LP_U_00_002.jpg";
+//        String path = "./data/1852_08_02_BUE_LP_U_00_001.jpg";
+//        String path = "./data/1852_07_22_BUE_LP_U_00_002.jpg";
+        String path = "./data/1852_07_20_BUE_LP_U_00_001.jpg";
+//        String path = "./data/1850_01_15_BCN_DB_U_14_000_000.jpg";
+//        String path = "./data/1850_01_13_BCN_DB_U_10_000_000.jpg";
+//        String path = "./data/1850_01_09_BCN_DB_U_10_000_004.jpg";
+        
         ProcessOcrDocument processOcrDocument = new ProcessOcrDocument();
         File ocrDir = new File("../ocr");
         if(!ocrDir.exists()){
@@ -26,8 +36,8 @@ public class PortadaOcr {
             processOcrDocument.init(new File("./").getCanonicalFile().getAbsolutePath(), "bcn");
             processOcrDocument.process(path);
             Document dc = processOcrDocument.getResult();
-            processOcrDocument.saveText("../ocr/1852_08_03_BUE_LP_U_00_002.txt");
-            processOcrDocument.saveRawText("../ocr/1852_08_03_BUE_LP_U_00_002.or.txt");
+            processOcrDocument.saveText("../ocr/result.txt");
+            processOcrDocument.saveRawText("../ocr/result.ori.txt");
             System.out.println(processOcrDocument.getJsonString());
             
 //            processOcrDocument.process("../data/inclinada.jpg");

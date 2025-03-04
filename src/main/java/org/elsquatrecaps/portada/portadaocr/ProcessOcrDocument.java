@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -31,9 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
+import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 public class ProcessOcrDocument {
-    private static final String configFileName = "project_access.properties";
+    public static final int ORIGINAL_TEXT=0;
+    public static final int TEXT_FROM_PARAGRAPHS=1;
+    public static final int TEXT_FROM_LINES=2;
+    public static final int TEXT_FROM_WORDS=3;
+    private static final String CONFIG_FILE_NAME = "project_access.properties";
     private static final Map<String, String> mimeTypes = new HashMap<>();
     private String projectId;
     private String location; // Format is "us" or "eu".
@@ -68,7 +72,7 @@ public class ProcessOcrDocument {
         if(!team.endsWith("/")){
             strb.append("/");
         }
-        strb.append(configFileName);
+        strb.append(CONFIG_FILE_NAME);
         prop.load(new FileInputStream(strb.toString()));
         this.projectId = prop.getProperty("projectId");
         this.location = prop.getProperty("location");
@@ -87,7 +91,7 @@ public class ProcessOcrDocument {
         if(!team.endsWith("/")){
             strb.append("/");
         }
-        strb.append(configFileName);
+        strb.append(CONFIG_FILE_NAME);
         prop.load(new FileInputStream(strb.toString()));
         this.projectId = prop.getProperty("projectId");
         this.location = prop.getProperty("location");
@@ -166,39 +170,170 @@ public class ProcessOcrDocument {
     
     public void saveRawText(String path) throws IOException{
         try(FileWriter fw = new FileWriter(path)){
-            fw.append(getText());
+            fw.append(getText(ORIGINAL_TEXT));
         }
     }
     
     public void saveText(String path) throws IOException{
+        
+        String text = getWordsToString();
         try(FileWriter fw = new FileWriter(path)){
-//            fw.append(getParagraphs(0));
-            fw.append(ProcessOcrDocument.this.getWordsToString());
+//            fw.append(getParagraphs(0));       
+            fw.append(text);
         }
     }
     
     public String getText(){
-        return documentResponse.getText();
+        return getText(TEXT_FROM_WORDS);
+    }
+    
+    public String getText(int textForm){
+        String ret;
+        switch (textForm) {
+            case ORIGINAL_TEXT:
+                ret = documentResponse.getText();
+                break;
+            case TEXT_FROM_PARAGRAPHS:
+                ret = getParagraphs();
+                break;
+            case TEXT_FROM_LINES:
+                ret = getLines();
+                break;
+            case TEXT_FROM_WORDS:
+                ret = getWordsToString();
+                break;
+            default:
+                throw new AssertionError();
+        }
+        return ret;
     }
     
     public String getWordsToString(){
-        return getWordsToString(0);
-    }
-    
-    public String getWordsToString(int s){
-        StringBuilder strb = new StringBuilder();
-        WordPointer pointer = new WordPointer(documentResponse);
-        if(s<=0){
-            s=documentResponse.getPages(0).getTokensCount();
-            for(int i=1; i< documentResponse.getPagesCount(); i++){
-                s+=documentResponse.getPages(i).getTokensCount();
+        List<Line> lines = new LinkedList<>();
+        WordPointer wp = new WordPointer(documentResponse);
+        int[] minMaxX = {Integer.MAX_VALUE, Integer.MIN_VALUE};
+        while(wp.hasNext()){
+            Word w = wp.getNext();
+            lines.add(new Line(w));
+            if(w.xCenterLeft < minMaxX[0]){
+                minMaxX[0] = w.xCenterLeft;
+            }
+            if(w.xCenterRight > minMaxX[1]){
+                minMaxX[1] = w.xCenterRight;
             }
         }
-        int i=0;
-        while (i<s && pointer.hasNext()){
-            strb.append(pointer.getNext());
-            i++;
+        
+        for(int thx=5; thx<=150; thx+=5){
+            boolean joinLines = true;
+            while(joinLines){
+                boolean foundCandidates = false;
+                for(int i=0; i<lines.size(); i++){
+                    for(int j=lines.size()-1; j>i; j--){
+                        if(lines.get(i).addWord(lines.get(j),thx)){
+                            foundCandidates = true;
+                            lines.remove(j);
+                        }
+                    }            
+                }
+                joinLines=foundCandidates;
+            }
         }
+        //ASIGNAR bestLineForRegression
+        int xMid = (minMaxX[1]-minMaxX[0])/2;
+
+        for(Line l1: lines){
+            for(Line l2: lines){
+                //Actualització de les linies de regressió
+                if(l1.xCenterRight-l1.xCenterLeft<0.9*(minMaxX[1]-minMaxX[0])){
+                    //DL2L1 = distància de l2 a l1
+                    int distL2ToL1 = Math.abs(l2.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
+                    //DBRL1L1 = distancia de l1.bestLineForRegression a l1
+                    int distBestRegL1ToL1 = Math.abs(l1.bestLineForRegression.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
+                    //SI AMPLADA(DL2L1)>AMPLADA(DBRL1L1) && AMPLADA(DBRL1L1)<0.9*(minMaxX[1]-minMaxX[0]
+                      // || AMPLADA(DBRL1L1)>=0.9*(minMaxX[1]-minMaxX[0] && DL2L1 < DBRL1L1
+                    if((l2.xCenterRight-l2.xCenterLeft 
+                                    > l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
+                                && l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft 
+                                    < 0.9*(minMaxX[1]-minMaxX[0]))
+                            || (l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
+                                    >= 0.9*(minMaxX[1]-minMaxX[0]) 
+                                && distL2ToL1 < distBestRegL1ToL1)){
+                        l1.setBestLineForRegression(l2);
+                    }           
+                }else if(l2.xCenterRight-l2.xCenterLeft<0.9*(minMaxX[1]-minMaxX[0])){
+                    //DL2L1 = distància de l2 a l1
+                    int distL1ToL2 = Math.abs(l1.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
+                    //DBRL2L2 = distancia de l2.bestLineForRegression a l2
+                    int distBestRegL2ToL2 = Math.abs(l2.bestLineForRegression.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
+                    //SI AMPLADA(DL1L2)>AMPLADA(DBRL2L2) && AMPLADA(DBRL2L2)<0.9*(minMaxX[1]-minMaxX[0]
+                      // || AMPLADA(DBRL2L2)>=0.9*(minMaxX[1]-minMaxX[0] && DL1L2 < DBRL2L2
+                    if((l1.xCenterRight-l1.xCenterLeft 
+                                    > l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
+                                && l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft 
+                                    < 0.9*(minMaxX[1]-minMaxX[0]))
+                            || (l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
+                                    >= 0.9*(minMaxX[1]-minMaxX[0]) 
+                                && distL1ToL2 < distBestRegL2ToL2)){
+                        l2.setBestLineForRegression(l1);
+                    }           
+                }        
+            }
+        }
+                
+        for(int i=0; i<1; i++){
+            Collections.sort(lines, (Line l1, Line l2) -> {
+                int y1;
+                int y2;
+                double p;
+                y1 = l1.predictYFromRegression(l1.xCenterLeft);
+                y2 = l2.predictYFromRegression(l1.xCenterLeft);
+                return y1-y2;
+            });
+        }
+//        for(Line line: lines){
+//            line.text = line.text.replace("\n$", "").replaceAll("\n", " ");
+//        }
+        StringBuilder strb = new StringBuilder();
+        Pattern textWithoutEndPoint = Pattern.compile("^.*\\w\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textStartingInLowerCase = Pattern.compile("^\\s*[^A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textEndingInAComma = Pattern.compile("^.*\\w[,;]+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textEndingInAPeriod = Pattern.compile("^.*\\w\\.+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textEndingInWordAndAPeriod = Pattern.compile("^.*\\w{3,}\\.+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textStartingInUppercase = Pattern.compile("^\\s*[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textAsTitle = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ]+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textEndingInAHyphen = Pattern.compile("^.*[-¬]\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        for(int i=0; i<lines.size()-1; i++){
+            String cat;
+            if(textWithoutEndPoint.matcher(lines.get(i).toString()).matches() && textStartingInLowerCase.matcher(lines.get(i+1).toString()).matches()){
+                    cat = " ";
+            }else if(textEndingInAHyphen.matcher(lines.get(i).toString()).matches()){
+                    cat = "";
+            }else if(textEndingInAPeriod.matcher(lines.get(i).toString()).matches()&& textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
+                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.9*(minMaxX[1]-minMaxX[0])
+                        || lines.get(i+1).xCenterLeft - lines.get(i).heightSum/lines.size() > minMaxX[0]
+                        || textEndingInWordAndAPeriod.matcher(lines.get(i).toString()).matches()){
+                    cat = "\n";                    
+                }else{
+                    cat = " ";
+                }
+            }else if(textEndingInAComma.matcher(lines.get(i).toString()).matches()&& textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
+                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.9*(minMaxX[1]-minMaxX[0])
+                        || lines.get(i+1).xCenterLeft>minMaxX[0]){
+                    cat = "\n";                    
+                }else{
+                    cat = " ";
+                }
+            }else if(textAsTitle.matcher(lines.get(i).toString()).matches() || textAsTitle.matcher(lines.get(i+1).toString()).matches()){
+                cat = "\n";
+            }else{
+                cat=" ";
+            }
+            strb.append(lines.get(i).text.replaceFirst("-?\n?$", "").replaceAll("\n", " "));
+            strb.append(cat);            
+        }
+        strb.append(lines.get(lines.size()-1).text.replace("-?\n?$", "").replaceAll("\n", " "));
+        strb.append("\n");
+        
         return strb.toString();
     }
     
@@ -379,69 +514,136 @@ public class ProcessOcrDocument {
     
     private static final class Line extends Word{
         Deque<Word> wordsOfLine;
-        int threshold;
+        SimpleRegression rLine = new SimpleRegression();
+        Line bestLineForRegression;
+        int distanceToBestRegression=0;
 
-        public Line(int threshold) {
+        public Line() {
             wordsOfLine = new LinkedList<>();            
-            this.threshold = threshold;
+            bestLineForRegression = this;
         }
         
-        public Line(Word word, int threshold){
-            this(threshold);
-            addWord(word);
+        public Line(Word word){
+            this();
+            wordsOfLine.add(word);
+            xCenterLeft = word.xCenterLeft;
+            yCenterLeft = word.yCenterLeft;
+            xCenterRight = word.xCenterRight;
+            yCenterRight = word.yCenterRight;
+            text = word.text;
+            rLine.addData(xCenterLeft, yCenterLeft);
+            rLine.addData(xCenterRight, yCenterRight);
+            heightSum += word.heightSum;
+
         }
         
-        public Line(Token token, Document document, int threshold){
-            this(new Word(token, document), threshold);
+        public Line(Token token, Document document){
+            this(new Word(token, document));
         }
         
-        public boolean addWord(Word word){
+        public boolean addWord(Line line, int thresholdx){
             boolean ret;
             if(wordsOfLine.isEmpty()){
-                wordsOfLine.add(word);
+                wordsOfLine.addAll(line.wordsOfLine);
+                for(Word w: line.wordsOfLine){
+                    rLine.addData(w.xCenterLeft, w.yCenterLeft);
+                    rLine.addData(w.xCenterRight, w.yCenterRight);
+                    heightSum += w.heightSum;
+                }
                 ret = true;
             }else{
-                int cmp = compareTo(word);
+                int thresholdy = (int) (0.6*Math.max(this.heightSum/(this.wordsOfLine.size()*2.0),line.heightSum/(line.wordsOfLine.size()*2.0)));
+                int cmp = compareTo(line);
                 if(cmp<0){
-                    ret = distance(word.xCenterRight, word.yCenterRight, xCenterLeft, yCenterLeft) < threshold;
+                    ret = this.areInTheSameLine(line, cmp, thresholdx, thresholdy);
                     if(ret){
-                        wordsOfLine.addFirst(word);
-                        xCenterLeft = word.xCenterLeft;
-                        yCenterLeft = word.yCenterLeft;
+                        while(!line.wordsOfLine.isEmpty()){
+                            Word w = line.wordsOfLine.pollLast();
+                            wordsOfLine.addFirst(w);
+                            rLine.addData(w.xCenterLeft, w.yCenterLeft);
+                            rLine.addData(w.xCenterRight, w.yCenterRight);
+                            heightSum += w.heightSum;
+                        }
+                        xCenterLeft = line.xCenterLeft;
+                        yCenterLeft = line.yCenterLeft;
+                        text = line.text.concat(text);
                     }
                 }else if(cmp>0){
-                    ret = distance(word.xCenterLeft, word.yCenterLeft, xCenterRight, yCenterRight) < threshold;
+                    ret = areInTheSameLine(line, cmp, thresholdx, thresholdy);
                     if(ret){
-                        wordsOfLine.addLast(word);
-                        xCenterRight = word.xCenterRight;
-                        yCenterRight = word.yCenterRight;
+                        while(!line.wordsOfLine.isEmpty()){
+                            Word w = line.wordsOfLine.pollFirst();
+                            wordsOfLine.addLast(w);
+                            rLine.addData(w.xCenterLeft, w.yCenterLeft);
+                            rLine.addData(w.xCenterRight, w.yCenterRight);
+                            heightSum += w.heightSum;
+                        }
+                        xCenterRight = line.xCenterRight;
+                        yCenterRight = line.yCenterRight;
+                        text = text.concat(line.text);
                     }
                 }else{
+                    //buscar si cabe donde cabe
                     ret = false;
+                    for(int i=1; i<wordsOfLine.size(); i++){
+                        if(((LinkedList<Word>)wordsOfLine).get(i-1).areInTheSameLine(line, cmp, thresholdx, thresholdy)
+                                && ((LinkedList<Word>)wordsOfLine).get(i).areInTheSameLine(line, -1, thresholdx, thresholdy)){
+                            int off=0;
+                            for(Word w: line.wordsOfLine){
+                                ((LinkedList<Word>)wordsOfLine).add(i+off, w);
+                                rLine.addData(w.xCenterLeft, w.yCenterLeft);
+                                rLine.addData(w.xCenterRight, w.yCenterRight);
+                                heightSum += w.heightSum;
+                                off++;
+                            }
+                            ret = true;
+                            break;
+                        }
+                    }
+                    if(ret){
+                        StringBuilder strb = new StringBuilder();
+                       for(Word w: wordsOfLine){
+                            strb.append(w.text);
+                        }
+                        text = strb.toString();
+                    }
                 }
-                if(ret){
-                    text = text.concat(word.text);
-                }                
             }     
             return ret;
         }
         
+        public void setBestLineForRegression(Line line){
+            int xMid = (this.xCenterLeft+this.xCenterRight)/2;
+            setBestLineForRegression(line, xMid);
+        }
+        
+        public void setBestLineForRegression(Line line, int x){
+            this.distanceToBestRegression = this.predictYFromRegression(x) - line.predictYFromRegression(x);
+            this.bestLineForRegression = line.bestLineForRegression;
+        }
+        
+        public int predictYFromRegression(int x){
+            return (int) (this.bestLineForRegression.rLine.predict(x) + distanceToBestRegression);
+        }
+        
         private int compareTo(Word word){
+            int th;
             int ret;
-            if(word.xCenterRight <= this.xCenterLeft){
+            if(word instanceof Line){
+                th = (int) (word.heightSum/(((Line)word).wordsOfLine.size()*2.0));
+            }else{
+                th = (int) (word.heightSum/2.0);
+            }
+            th = (int) (0.35*Math.max(this.heightSum/(this.wordsOfLine.size()*2.0),th));
+
+            if(word.xCenterRight - th <= this.xCenterLeft){
                 ret = -1;
-            }else if(word.xCenterLeft >= this.xCenterRight){
+            }else if(word.xCenterLeft + th >= this.xCenterRight){
                 ret = 1;
             }else{
                 //ERROR
                 ret = 0;
             }
-            return ret;
-        }
-        
-        private int distance(int x1, int y1, int x2, int y2){
-            int ret;
-            ret = (int) Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2));
             return ret;
         }
     }
@@ -454,6 +656,7 @@ public class ProcessOcrDocument {
         int yCenterRight;
         int xCenterLeft;
         int xCenterRight;
+        int heightSum;
         
         protected Word(){
         }
@@ -466,6 +669,23 @@ public class ProcessOcrDocument {
             yCenterRight= (token.getLayout().getBoundingPoly().getVertices(1).getY()+token.getLayout().getBoundingPoly().getVertices(2).getY())/2;
             xCenterLeft= (token.getLayout().getBoundingPoly().getVertices(0).getX()+token.getLayout().getBoundingPoly().getVertices(3).getX())/2;
             xCenterRight= (token.getLayout().getBoundingPoly().getVertices(1).getX()+token.getLayout().getBoundingPoly().getVertices(2).getX())/2;
+            heightSum = token.getLayout().getBoundingPoly().getVertices(3).getY() - token.getLayout().getBoundingPoly().getVertices(0).getY() 
+                            + token.getLayout().getBoundingPoly().getVertices(2).getY() - token.getLayout().getBoundingPoly().getVertices(1).getY();
+        }
+        
+        protected boolean areInTheSameLine(Word word, int pos, int thresholdx, int thresholdy){
+            boolean ret;
+            if(pos<0){
+                ret = Math.abs(word.yCenterRight - yCenterLeft) <= thresholdy && Math.abs(word.xCenterRight - xCenterLeft) <= thresholdx;
+            }else{
+                ret = Math.abs(word.yCenterLeft - yCenterRight) <= thresholdy && Math.abs(word.xCenterLeft - xCenterRight) <= thresholdx;
+            }
+            return ret;
+        }
+
+        @Override
+        public String toString() {
+            return text; // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/OverriddenMethodBody
         }
     }
     
@@ -480,55 +700,19 @@ public class ProcessOcrDocument {
         
         public boolean hasNext(){
             if(token>=document.getPages(page).getTokensCount()){
-                if(returnEol){
-                    token=0;
-                    page++;
-                    returnEol=false;
-                }else{
-                    returnEol=true;
-                }
+                token=0;
+                page++;
             }
             return page<document.getPagesCount();
         }
 
-        public String getNext(){
-            String ret;
-//            String nextp;
-            String cat="";
-            if(returnEol){
-                ret = EOL;
-            }else{
-                ret = getWordAsString(page, token, "");
-//                nextp = getLine(page, token+1, "");
-//                int s = -1;
-//                Pattern p11 = Pattern.compile("^.*\\w{2,}\\W\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-//                Pattern p21 = Pattern.compile("^\\s*[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-//                Pattern p12 = Pattern.compile("^.*\\.\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-//                Pattern p22 = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-//                Pattern p3 = Pattern.compile("^.*[-¬]\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-//                if(p11.matcher(ret).matches() && p21.matcher(nextp).matches()
-//                        || p12.matcher(ret).matches() && p22.matcher(nextp).matches()){
-//                    cat = "\n";
-//                }else if(p3.matcher(ret).matches()){
-//                    cat = "";
-//                    s=0;
-//                }
-//                ret = ret.replaceAll("[-¬]\\n", "").replaceAll(" ?\\n ?", " ");
-//                ret = ret.substring(0, ret.length()+s).concat(cat);                  
-            }
+        public Word getNext(){
+            Word ret;
+                ret = getWord(page, token);
             token++;
             return ret;
         }
-        
-        private String getWordAsString(int page, int word, String def){
-            String ret = def;
-            Word w = getWord(page, word);
-            if (w!=null){
-                ret = w.text;
-            }
-            return ret;
-        }
-        
+                
         private Word getWord(int page, int word){
             Word ret = null;
             if(word>=document.getPages(page).getTokensCount()){
