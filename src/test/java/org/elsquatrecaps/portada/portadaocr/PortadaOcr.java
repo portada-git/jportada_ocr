@@ -21,10 +21,11 @@ public class PortadaOcr {
 //        String path = "./data/1852_08_03_BUE_LP_U_00_002.jpg";
 //        String path = "./data/1852_08_02_BUE_LP_U_00_001.jpg";
 //        String path = "./data/1852_07_22_BUE_LP_U_00_002.jpg";
-        String path = "./data/1852_07_20_BUE_LP_U_00_001.jpg";
+//        String path = "./data/1852_07_20_BUE_LP_U_00_001.jpg";
 //        String path = "./data/1850_01_15_BCN_DB_U_14_000_000.jpg";
 //        String path = "./data/1850_01_13_BCN_DB_U_10_000_000.jpg";
 //        String path = "./data/1850_01_09_BCN_DB_U_10_000_004.jpg";
+        String path = "./data/0013_1852_01_10_FIA_dl_10000031836_img10418410__Pagina13__DiarioDeBarcelonaAno18_002.jpg";
         
         ProcessOcrDocument processOcrDocument = new ProcessOcrDocument();
         File ocrDir = new File("../ocr");

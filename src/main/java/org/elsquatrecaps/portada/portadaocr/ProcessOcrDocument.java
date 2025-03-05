@@ -308,6 +308,8 @@ public class ProcessOcrDocument {
                     cat = " ";
             }else if(textEndingInAHyphen.matcher(lines.get(i).toString()).matches()){
                     cat = "";
+            }else if(lines.get(i+1).xCenterLeft - (lines.get(i).heightSum/lines.size())*1.75 > minMaxX[0]){
+                cat = "\n";
             }else if(textEndingInAPeriod.matcher(lines.get(i).toString()).matches()&& textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
                 if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.9*(minMaxX[1]-minMaxX[0])
                         || lines.get(i+1).xCenterLeft - lines.get(i).heightSum/lines.size() > minMaxX[0]
