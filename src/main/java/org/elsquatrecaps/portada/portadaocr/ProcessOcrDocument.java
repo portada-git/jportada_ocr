@@ -347,9 +347,10 @@ public class ProcessOcrDocument {
             strb.append(lines.get(i).text.replaceFirst("-?\n?$", "").replaceAll("\n", " "));
             strb.append(cat);            
         }
-        strb.append(lines.get(lines.size()-1).text.replace("-?\n?$", "").replaceAll("\n", " "));
-        strb.append("\n");
-        
+        if(!lines.isEmpty()){
+            strb.append(lines.get(lines.size()-1).text.replace("-?\n?$", "").replaceAll("\n", " "));
+            strb.append("\n");
+        }        
         return strb.toString();
     }
     
