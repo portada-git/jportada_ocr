@@ -33,6 +33,11 @@ import java.util.regex.Pattern;
 import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 public class ProcessOcrDocument {
+    public static final int ONLY_INDENTED_CRITERIA=0;
+    public static final int MULTY_CRITERIA=1;
+    public static final int NOT_INDENTED_CRITERIA=2;
+    public static final int MIN=0;
+    public static final int MAX=1;
     public static final int ORIGINAL_TEXT=0;
     public static final int TEXT_FROM_PARAGRAPHS=1;
     public static final int TEXT_FROM_LINES=2;
@@ -47,6 +52,7 @@ public class ProcessOcrDocument {
     private String filePath;
     private byte[] imageFileData;
     private Document documentResponse;
+    private int methodForBuildingParagraphsFromLines = 0;
     static {
         mimeTypes.put("pdf", "application/pdf");
         mimeTypes.put("jpg", "image/jpeg");
@@ -208,22 +214,22 @@ public class ProcessOcrDocument {
         return ret;
     }
     
-    public String getWordsToString(){
+    public String getWordsToString(){    
         List<Line> lines = new LinkedList<>();
         WordPointer wp = new WordPointer(documentResponse);
         int[] minMaxX = {Integer.MAX_VALUE, Integer.MIN_VALUE};
         while(wp.hasNext()){
             Word w = wp.getNext();
             lines.add(new Line(w));
-            if(w.xCenterLeft < minMaxX[0]){
-                minMaxX[0] = w.xCenterLeft;
+            if(w.xCenterLeft < minMaxX[MIN]){
+                minMaxX[MIN] = w.xCenterLeft;
             }
-            if(w.xCenterRight > minMaxX[1]){
-                minMaxX[1] = w.xCenterRight;
+            if(w.xCenterRight > minMaxX[MAX]){
+                minMaxX[MAX] = w.xCenterRight;
             }
         }
         
-        for(int thx=5; thx<=150; thx+=5){
+        for(int thx=2; thx<=150; thx+=2){
             boolean joinLines = true;
             while(joinLines){
                 boolean foundCandidates = false;
@@ -239,40 +245,40 @@ public class ProcessOcrDocument {
             }
         }
         //ASIGNAR bestLineForRegression
-        int xMid = (minMaxX[1]-minMaxX[0])/2;
+        int xMid = (minMaxX[MAX]-minMaxX[MIN])/2;
 
         for(Line l1: lines){
             for(Line l2: lines){
                 //Actualització de les linies de regressió
-                if(l1.xCenterRight-l1.xCenterLeft<0.9*(minMaxX[1]-minMaxX[0])){
+                if(l1.xCenterRight-l1.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
                     //DL2L1 = distància de l2 a l1
                     int distL2ToL1 = Math.abs(l2.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
                     //DBRL1L1 = distancia de l1.bestLineForRegression a l1
                     int distBestRegL1ToL1 = Math.abs(l1.bestLineForRegression.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
-                    //SI AMPLADA(DL2L1)>AMPLADA(DBRL1L1) && AMPLADA(DBRL1L1)<0.9*(minMaxX[1]-minMaxX[0]
-                      // || AMPLADA(DBRL1L1)>=0.9*(minMaxX[1]-minMaxX[0] && DL2L1 < DBRL1L1
+                    //SI AMPLADA(DL2L1)>AMPLADA(DBRL1L1) && AMPLADA(DBRL1L1)<0.9*(minMaxX[MAX]-minMaxX[MIN]
+                      // || AMPLADA(DBRL1L1)>=0.9*(minMaxX[MAX]-minMaxX[MIN] && DL2L1 < DBRL1L1
                     if((l2.xCenterRight-l2.xCenterLeft 
                                     > l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
                                 && l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft 
-                                    < 0.9*(minMaxX[1]-minMaxX[0]))
+                                    < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
                             || (l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
-                                    >= 0.9*(minMaxX[1]-minMaxX[0]) 
+                                    >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
                                 && distL2ToL1 < distBestRegL1ToL1)){
                         l1.setBestLineForRegression(l2);
                     }           
-                }else if(l2.xCenterRight-l2.xCenterLeft<0.9*(minMaxX[1]-minMaxX[0])){
+                }else if(l2.xCenterRight-l2.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
                     //DL2L1 = distància de l2 a l1
                     int distL1ToL2 = Math.abs(l1.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
                     //DBRL2L2 = distancia de l2.bestLineForRegression a l2
                     int distBestRegL2ToL2 = Math.abs(l2.bestLineForRegression.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
-                    //SI AMPLADA(DL1L2)>AMPLADA(DBRL2L2) && AMPLADA(DBRL2L2)<0.9*(minMaxX[1]-minMaxX[0]
-                      // || AMPLADA(DBRL2L2)>=0.9*(minMaxX[1]-minMaxX[0] && DL1L2 < DBRL2L2
+                    //SI AMPLADA(DL1L2)>AMPLADA(DBRL2L2) && AMPLADA(DBRL2L2)<0.9*(minMaxX[MAX]-minMaxX[MIN]
+                      // || AMPLADA(DBRL2L2)>=0.9*(minMaxX[MAX]-minMaxX[MIN] && DL1L2 < DBRL2L2
                     if((l1.xCenterRight-l1.xCenterLeft 
                                     > l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
                                 && l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft 
-                                    < 0.9*(minMaxX[1]-minMaxX[0]))
+                                    < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
                             || (l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
-                                    >= 0.9*(minMaxX[1]-minMaxX[0]) 
+                                    >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
                                 && distL1ToL2 < distBestRegL2ToL2)){
                         l2.setBestLineForRegression(l1);
                     }           
@@ -290,9 +296,37 @@ public class ProcessOcrDocument {
                 return y1-y2;
             });
         }
-//        for(Line line: lines){
-//            line.text = line.text.replace("\n$", "").replaceAll("\n", " ");
-//        }
+        String ret="";
+        if(methodForBuildingParagraphsFromLines==ONLY_INDENTED_CRITERIA){
+            ret = buildParagraphsFromLineIndentedOnly(lines, minMaxX);
+        }else if(methodForBuildingParagraphsFromLines==MULTY_CRITERIA){
+            ret = buildParagraphsFromLineMultiCond(lines, minMaxX);
+        }
+        
+        return ret;
+    }
+
+    private String buildParagraphsFromLineIndentedOnly(List<Line> lines, int[] minMaxX){
+        Pattern textEndingInAHyphen = Pattern.compile("^.*[-¬]\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        StringBuilder strb = new StringBuilder();
+        for(int pos=0; pos<lines.size()-1; pos++){
+            String cat=" ";
+            if(textEndingInAHyphen.matcher(lines.get(pos).toString()).matches()){
+                cat = "";
+            }else if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                cat = "\n";
+            }
+            strb.append(lines.get(pos).text.replaceFirst("-?\n?$", "").replaceAll("\n", " "));
+            strb.append(cat);
+        }
+        if(!lines.isEmpty()){
+            strb.append(lines.get(lines.size()-1).text.replace("-?\n?$", "").replaceAll("\n", " "));
+            strb.append("\n");
+        }        
+        return strb.toString();
+    }
+
+    private String buildParagraphsFromLineMultiCond(List<Line> lines, int[] minMaxX){
         StringBuilder strb = new StringBuilder();
         Pattern textWithoutEndPoint = Pattern.compile("^.*\\w\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
         Pattern textStartingInLowerCase = Pattern.compile("^\\s*[^A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
@@ -300,51 +334,98 @@ public class ProcessOcrDocument {
         Pattern textEndingInAPeriod = Pattern.compile("^.*\\w\\.+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
         Pattern textEndingInWordAndAPeriod = Pattern.compile("^.*\\w{3,}\\.+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
         Pattern textStartingInUppercase = Pattern.compile("^\\s*[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ].*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-        Pattern textAsTitle = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ]+\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textAsTitle = Pattern.compile("^\\s*[0-9A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ \\W]{4,}\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
         Pattern textEndingInAHyphen = Pattern.compile("^.*[-¬]\n?$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
-        for(int i=0; i<lines.size()-1; i++){
-            String cat;
-            if(textWithoutEndPoint.matcher(lines.get(i).toString()).matches() && textStartingInLowerCase.matcher(lines.get(i+1).toString()).matches()){
+        Pattern textAsPageNumOrTitle = Pattern.compile("^\\s*(?:(?:\\d+)|(?:[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ \\W]*))\\n.*$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        Pattern textEndsWithProperName = Pattern.compile("^\\s*.*(?:(?:[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ]\\.)|(?:[A-ZÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑ]\\w+(?: y)?))\n$", Pattern.DOTALL+Pattern.UNICODE_CASE+Pattern.UNICODE_CHARACTER_CLASS);
+        for(int pos=0; pos<lines.size()-1; pos++){
+            String cat="";
+            if(textWithoutEndPoint.matcher(lines.get(pos).toString()).matches() && textStartingInLowerCase.matcher(lines.get(pos+1).toString()).matches()){
+                if((pos==0 || cat.equals("\n")) && textAsPageNumOrTitle.matcher(lines.get(pos).toString()).matches()){
+                    cat="\n";
+                }else{
                     cat = " ";
-            }else if(textEndingInAHyphen.matcher(lines.get(i).toString()).matches()){
-                    cat = "";
-            }else if(lines.get(i+1).xCenterLeft - (lines.get(i).heightSum/lines.size())*1.75 > minMaxX[0]){
+                }
+            }else if(textAsTitle.matcher(lines.get(pos).toString()).matches() || textAsTitle.matcher(lines.get(pos+1).toString()).matches()){
                 cat = "\n";
-            }else if(textEndingInAPeriod.matcher(lines.get(i).toString()).matches()){
-                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.75*(minMaxX[1]-minMaxX[0])
-                        || lines.get(i+1).xCenterLeft - lines.get(i).heightSum/lines.size() > minMaxX[0]){
-                    cat = "\n";                    
+            }else if(textEndingInAHyphen.matcher(lines.get(pos).toString()).matches()){
+                cat = "";            
+            }else if(textEndsWithProperName.matcher(lines.get(pos).toString()).matches() && textStartingInUppercase.matcher(lines.get(pos+1).toString()).matches()){
+//                if(Math.abs(lines.get(pos+1).xCenterLeft-minMaxX[MIN])> 24
+//                        || lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN] * 1.4, 10)
+//                        || ((lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN], 10))
+//                        &&  lines.get(pos+1).xCenterRight-lines.get(pos+1).xCenterLeft>0.3*(minMaxX[MAX]-minMaxX[MIN]))){
+//                    cat = "\n";
+//                }else{
+//                    cat = " ";
+//                }
+                if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                    cat = "\n";
                 }else{
                     cat = " ";
-                }
-            }else if(textEndingInAPeriod.matcher(lines.get(i).toString()).matches()&& textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
-                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.9*(minMaxX[1]-minMaxX[0])
-                        || lines.get(i+1).xCenterLeft - lines.get(i).heightSum/lines.size() > minMaxX[0]
-                        || textEndingInWordAndAPeriod.matcher(lines.get(i).toString()).matches()){
-                    cat = "\n";                    
+                }               
+            }else if(textEndingInWordAndAPeriod.matcher(lines.get(pos).toString()).matches() && textStartingInUppercase.matcher(lines.get(pos+1).toString()).matches()){
+//                if(Math.abs(lines.get(pos+1).xCenterLeft-minMaxX[MIN])> 20
+//                        || lines.get(pos).xCenterRight-lines.get(pos).xCenterLeft<=0.9*(minMaxX[MAX]-minMaxX[MIN])
+//                        || lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN],10)){
+//                    cat = "\n";                    
+//                }else{
+//                    cat = " ";
+//                }
+                if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                    cat = "\n";
                 }else{
                     cat = " ";
-                }
-            }else if(textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
-                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.80*(minMaxX[1]-minMaxX[0])
-                        || lines.get(i+1).xCenterLeft - (lines.get(i).heightSum/lines.size())*1.75 > minMaxX[0]){
-                    cat = "\n";                    
+                }    
+            }else if(textStartingInUppercase.matcher(lines.get(pos+1).toString()).matches()){
+//                if(lines.get(pos).xCenterRight-lines.get(pos).xCenterLeft<=0.80*(minMaxX[MAX]-minMaxX[MIN])
+////                        || lines.get(pos+1).xCenterLeft - (lines.get(pos).heightSum/lines.size())*1.75 > minMaxX[MIN]){
+//                        || lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN] * 1.4, 10)
+//                        || ((lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN], 10))
+//                        &&  lines.get(pos+1).xCenterRight-lines.get(pos+1).xCenterLeft>0.3*(minMaxX[MAX]-minMaxX[MIN]))){
+//                    cat = "\n";                    
+//                }else{
+//                    cat = " ";
+//                }
+                if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                    cat = "\n";
                 }else{
                     cat = " ";
-                }
-            }else if(textEndingInAComma.matcher(lines.get(i).toString()).matches()&& textStartingInUppercase.matcher(lines.get(i+1).toString()).matches()){
-                if(lines.get(i).xCenterRight-lines.get(i).xCenterLeft<=0.9*(minMaxX[1]-minMaxX[0])
-                        || lines.get(i+1).xCenterLeft>minMaxX[0]){
-                    cat = "\n";                    
+                }    
+            }else if(textEndingInAPeriod.matcher(lines.get(pos).toString()).matches()){
+//                if(lines.get(pos).xCenterRight-lines.get(pos).xCenterLeft<=0.75*(minMaxX[MAX]-minMaxX[MIN])
+//                        || lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN],10)){
+//                    cat = "\n";                    
+//                }else{
+//                    cat = " ";
+//                }
+                if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                    cat = "\n";
                 }else{
                     cat = " ";
-                }
-            }else if(textAsTitle.matcher(lines.get(i).toString()).matches() || textAsTitle.matcher(lines.get(i+1).toString()).matches()){
+                }    
+            }else if(textEndingInAComma.matcher(lines.get(pos).toString()).matches()&& textStartingInUppercase.matcher(lines.get(pos+1).toString()).matches()){
+//                if(lines.get(pos).xCenterRight-lines.get(pos).xCenterLeft<=0.9*(minMaxX[MAX]-minMaxX[MIN])
+//                        || lines.get(pos+1).xCenterLeft>Math.max(minMaxX[MIN],10)){
+//                    cat = "\n";                    
+//                }else{
+//                    cat = " ";
+//                }
+                if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
+                    cat = "\n";
+                }else{
+                    cat = " ";
+                }   
+//            }else if(lines.get(pos+1).xCenterLeft - (lines.get(pos).heightSum/lines.size())*1.75 > minMaxX[MIN]){
+//            }else if(lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN] * 1.4, 10)
+//                        || ((lines.get(pos+1).xCenterLeft - lines.get(pos).heightSum/lines.size() > Math.max(minMaxX[MIN], 10))
+//                        &&  lines.get(pos+1).xCenterRight-lines.get(pos+1).xCenterLeft<=0.3*(minMaxX[MAX]-minMaxX[MIN]))){ 
+            }else if(isIndentedLine(lines, pos+1, minMaxX[MIN])){
                 cat = "\n";
             }else{
                 cat=" ";
             }
-            strb.append(lines.get(i).text.replaceFirst("-?\n?$", "").replaceAll("\n", " "));
+            strb.append(lines.get(pos).text.replaceFirst("-?\n?$", "").replaceAll("\n", " "));
             strb.append(cat);            
         }
         if(!lines.isEmpty()){
@@ -352,6 +433,48 @@ public class ProcessOcrDocument {
             strb.append("\n");
         }        
         return strb.toString();
+    }
+    
+    private boolean isIndentedLine(List<Line> lines, int pos, int min){
+        boolean ret;
+        boolean before=true;
+        boolean exit=true;
+        int i;
+        ret = lines.get(pos).xCenterLeft-min>Math.max(0.35*getAverageHeight(lines.get(pos)),10);
+        if(ret){
+            //per si el text està inclinat verticalment
+            exit=false;
+            for(i=pos-1;i>=0 && !exit;i--){
+                if(lines.get(pos).xCenterLeft-lines.get(i).xCenterLeft<Math.min(-0.35*getAverageHeight(lines.get(pos)),-10)
+                        && lines.get(i).xCenterLeft-min<Math.min(3*getAverageHeight(lines.get(pos)), 130)){
+                    //la línia pos es troba significativament a l'esquerra de la linia pos
+                    before = false;
+                    exit = true;
+                }else if(lines.get(pos).xCenterLeft-lines.get(i).xCenterLeft>Math.max(0.35*getAverageHeight(lines.get(pos)),10)){
+                    exit = true;
+                }
+            }
+        }
+        if(ret && !(exit && before)){        
+            //per si el text està inclinat verticalment
+            exit=false;
+            before=true;
+            for(i=pos;i<lines.size() && !exit; i++){
+                if(lines.get(pos).xCenterLeft-lines.get(i).xCenterLeft<Math.min(-0.35*getAverageHeight(lines.get(pos)),-10)
+                        && lines.get(i).xCenterLeft-min<Math.min(3*getAverageHeight(lines.get(pos)), 130)){
+                    //la línia pos es troba significativament a l'esquerra de la linia pos
+                    ret = false;
+                    exit = true;
+                }else if(lines.get(pos).xCenterLeft-lines.get(i).xCenterLeft>Math.max(0.35*getAverageHeight(lines.get(pos)),10)){
+                    exit = true;
+                }
+            }
+        }
+        return ret && before;
+    }
+    
+    private int getAverageHeight(Line l){
+        return l.heightSum/l.wordsOfLine.size();
     }
     
     public String getLines(){
@@ -569,7 +692,7 @@ public class ProcessOcrDocument {
                 }
                 ret = true;
             }else{
-                int thresholdy = (int) (0.6*Math.max(this.heightSum/(this.wordsOfLine.size()*2.0),line.heightSum/(line.wordsOfLine.size()*2.0)));
+                int thresholdy = (int) (0.52*Math.max(this.heightSum/(this.wordsOfLine.size()*2.0),line.heightSum/(line.wordsOfLine.size()*2.0)));
                 int cmp = compareTo(line);
                 if(cmp<0){
                     ret = this.areInTheSameLine(line, cmp, thresholdx, thresholdy);
@@ -643,7 +766,8 @@ public class ProcessOcrDocument {
             return (int) (this.bestLineForRegression.rLine.predict(x) + distanceToBestRegression);
         }
         
-        private int compareTo(Word word){
+        @Override
+        public int compareTo(Word word){
             int th;
             int ret;
             if(word instanceof Line){
@@ -662,6 +786,16 @@ public class ProcessOcrDocument {
                 ret = 0;
             }
             return ret;
+        }
+        
+        @Override
+        public int getThresholdy(double distx){
+            return (int) (Math.log(distx/getUsualDistance()+1)*this.heightSum/this.wordsOfLine.size());
+        }
+        
+        @Override
+        public double getUsualDistance(){
+           return 0.6*this.heightSum/this.wordsOfLine.size(); 
         }
     }
     
@@ -690,6 +824,19 @@ public class ProcessOcrDocument {
                             + token.getLayout().getBoundingPoly().getVertices(2).getY() - token.getLayout().getBoundingPoly().getVertices(1).getY();
         }
         
+        protected boolean areInTheSameLine(Word word){
+            boolean ret;
+            int cmp = this.compareTo(word);
+            if(cmp == 0){
+                ret = false;
+            }else{
+                double distx = Math.min(Math.abs(word.xCenterRight - xCenterLeft), Math.abs(word.xCenterLeft - xCenterRight));
+                int thresholdy = Math.max(this.getThresholdy(distx), word.getThresholdy(distx));
+                ret =  areInTheSameLine(word, cmp, (int) (distx+100), thresholdy);
+            }
+            return ret;
+        }
+        
         protected boolean areInTheSameLine(Word word, int pos, int thresholdx, int thresholdy){
             boolean ret;
             if(pos<0){
@@ -702,8 +849,33 @@ public class ProcessOcrDocument {
 
         @Override
         public String toString() {
-            return text; // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/OverriddenMethodBody
+            return text; 
         }
+        
+        public int getThresholdy(double distx){
+            return (int) (Math.log(distx/getUsualDistance()+1)*this.heightSum);
+        }
+        
+        public double getUsualDistance(){
+           return 0.6*this.heightSum; 
+        }
+        
+        public int compareTo(Word word){
+            int th;
+            int ret;
+            th = (int) (0.35*word.heightSum/2.0);
+
+            if(word.xCenterRight - th <= this.xCenterLeft){
+                ret = -1;
+            }else if(word.xCenterLeft + th >= this.xCenterRight){
+                ret = 1;
+            }else{
+                //ERROR
+                ret = 0;
+            }
+            return ret;
+        }
+        
     }
     
     private static class WordPointer extends Pointer{
