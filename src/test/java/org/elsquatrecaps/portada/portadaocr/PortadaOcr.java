@@ -29,9 +29,13 @@ public class PortadaOcr {
             "1850_01_09_BCN_DB_U_10_000_004",   //9
             "0013_1852_01_10_FIA_dl_10000031836_img10418410__Pagina13__DiarioDeBarcelonaAno18_002",
             "1860_06_08_BCN_DB_M_18_003",       //11
-            "1860_06_08_BCN_DB_T_03_000"        //12
+            "1860_06_08_BCN_DB_T_03_000",        //12
+            "1910_02_01_BCN_DB_M_27_007",        //13
+            "1910_02_06_BCN_DB_U_38_000",        //14
+            "1910_02_20_BCN_DB_U_40_000",        //15
+            "1910_02_23_BCN_DB_M_27"        //16
         };
-        String path = files[11];
+        String path = files[0];
         
         if(all){
             processAll("./data/", "../ocr/", files);

@@ -245,43 +245,54 @@ public class ProcessOcrDocument {
             }
         }
         //ASIGNAR bestLineForRegression
-        int xMid = (minMaxX[MAX]-minMaxX[MIN])/2;
+//        int xMid = (minMaxX[MAX]-minMaxX[MIN])/2;
+        int xMid = (minMaxX[MAX]+minMaxX[MIN])/2;
 
         for(Line l1: lines){
             for(Line l2: lines){
                 //Actualització de les linies de regressió
-                if(l1.xCenterRight-l1.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
+                if(l1!=l2 && l1.bestLineForRegression!=l2.bestLineForRegression && l1.xCenterRight-l1.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
                     //DL2L1 = distància de l2 a l1
-                    int distL2ToL1 = Math.abs(l2.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
+//                    int distL2ToL1 = Math.abs(l2.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
+                    int distL2ToL1 = Math.abs(l2.predictYFromRegression(xMid) - (int)l1.rLine.predict(xMid));
                     //DBRL1L1 = distancia de l1.bestLineForRegression a l1
                     int distBestRegL1ToL1 = Math.abs(l1.bestLineForRegression.predictYFromRegression(xMid) - l1.predictYFromRegression(xMid));
                     //SI AMPLADA(DL2L1)>AMPLADA(DBRL1L1) && AMPLADA(DBRL1L1)<0.9*(minMaxX[MAX]-minMaxX[MIN]
                       // || AMPLADA(DBRL1L1)>=0.9*(minMaxX[MAX]-minMaxX[MIN] && DL2L1 < DBRL1L1
+//                    if((l2.xCenterRight-l2.xCenterLeft 
+//                                    > l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
+//                                && l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft 
+//                                    < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
+//                            || (l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
+//                                    >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
+//                                && distL2ToL1 < distBestRegL1ToL1)){
                     if((l2.xCenterRight-l2.xCenterLeft 
                                     > l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
                                 && l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft 
                                     < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
-                            || (l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
+                            || (l2.xCenterRight-l2.xCenterLeft>=  0.9*(minMaxX[MAX]-minMaxX[MIN]) 
+                                && l1.bestLineForRegression.xCenterRight-l1.bestLineForRegression.xCenterLeft
                                     >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
                                 && distL2ToL1 < distBestRegL1ToL1)){
                         l1.setBestLineForRegression(l2);
                     }           
-                }else if(l2.xCenterRight-l2.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
-                    //DL2L1 = distància de l2 a l1
-                    int distL1ToL2 = Math.abs(l1.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
-                    //DBRL2L2 = distancia de l2.bestLineForRegression a l2
-                    int distBestRegL2ToL2 = Math.abs(l2.bestLineForRegression.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
-                    //SI AMPLADA(DL1L2)>AMPLADA(DBRL2L2) && AMPLADA(DBRL2L2)<0.9*(minMaxX[MAX]-minMaxX[MIN]
-                      // || AMPLADA(DBRL2L2)>=0.9*(minMaxX[MAX]-minMaxX[MIN] && DL1L2 < DBRL2L2
-                    if((l1.xCenterRight-l1.xCenterLeft 
-                                    > l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
-                                && l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft 
-                                    < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
-                            || (l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
-                                    >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
-                                && distL1ToL2 < distBestRegL2ToL2)){
-                        l2.setBestLineForRegression(l1);
-                    }           
+//                }else if(l1!=l2 && l1.bestLineForRegression!=l2.bestLineForRegression && l2.xCenterRight-l2.xCenterLeft<0.9*(minMaxX[MAX]-minMaxX[MIN])){
+////                    //DL2L1 = distància de l2 a l1
+////                    int distL1ToL2 = Math.abs(l1.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
+//                    int distL1ToL2 = Math.abs(l1.predictYFromRegression(xMid) - (int)l2.rLine.predict(xMid));
+//                    //DBRL2L2 = distancia de l2.bestLineForRegression a l2
+//                    int distBestRegL2ToL2 = Math.abs(l2.bestLineForRegression.predictYFromRegression(xMid) - l2.predictYFromRegression(xMid));
+//                    //SI AMPLADA(DL1L2)>AMPLADA(DBRL2L2) && AMPLADA(DBRL2L2)<0.9*(minMaxX[MAX]-minMaxX[MIN]
+//                      // || AMPLADA(DBRL2L2)>=0.9*(minMaxX[MAX]-minMaxX[MIN] && DL1L2 < DBRL2L2
+//                    if((l1.xCenterRight-l1.xCenterLeft 
+//                                    > l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
+//                                && l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft 
+//                                    < 0.9*(minMaxX[MAX]-minMaxX[MIN]))
+//                            || (l2.bestLineForRegression.xCenterRight-l2.bestLineForRegression.xCenterLeft
+//                                    >= 0.9*(minMaxX[MAX]-minMaxX[MIN]) 
+//                                && distL1ToL2 < distBestRegL2ToL2)){
+//                        l2.setBestLineForRegression(l1);
+//                    }           
                 }        
             }
         }
@@ -291,8 +302,10 @@ public class ProcessOcrDocument {
                 int y1;
                 int y2;
                 double p;
-                y1 = l1.predictYFromRegression(l1.xCenterLeft);
-                y2 = l2.predictYFromRegression(l1.xCenterLeft);
+//                y1 = l1.predictYFromRegression(l1.xCenterLeft);
+//                y2 = l2.predictYFromRegression(l1.xCenterLeft);
+                y1 = l1.predictYFromRegression(xMid);
+                y2 = l2.predictYFromRegression(xMid);
                 return y1-y2;
             });
         }
@@ -758,7 +771,8 @@ public class ProcessOcrDocument {
         }
         
         public void setBestLineForRegression(Line line, int x){
-            this.distanceToBestRegression = this.predictYFromRegression(x) - line.predictYFromRegression(x);
+//            this.distanceToBestRegression = this.predictYFromRegression(x) - line.predictYFromRegression(x);
+            this.distanceToBestRegression = (int)(this.rLine.predict(x) - line.bestLineForRegression.rLine.predict(x));
             this.bestLineForRegression = line.bestLineForRegression;
         }
         
